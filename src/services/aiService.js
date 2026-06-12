@@ -95,8 +95,8 @@ ${ideaText}
 ${context.lastParagraphs}
 ---------------------------------------`;
 
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
-    const response = await fetch(`${apiUrl}/api/ai/generate`, {
+    const apiUrl = import.meta.env.VITE_API_URL || "";
+    const response = await fetch(`${apiUrl}/api/generate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
