@@ -1,4 +1,5 @@
-import { db } from '../firebase/config';
+import { db, storage } from '../firebase/config';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   collection, doc, setDoc, getDoc, getDocs, updateDoc, addDoc, deleteDoc,
   query, where, orderBy, serverTimestamp, collectionGroup, increment 
@@ -194,3 +195,11 @@ export async function toggleStoryLike(authorId, storyId, userId) {
     return true; // currently liked
   }
 }
+
+// STORAGE
+export async function uploadAudio(file, path) {
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  return await getDownloadURL(storageRef);
+}
+

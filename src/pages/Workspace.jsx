@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, MessageSquare, ChevronLeft, Save, Plus, Globe, CheckCircle, Menu, X, ImagePlus, Loader2, Trash2 } from 'lucide-react';
+import { Sparkles, MessageSquare, ChevronLeft, Save, Plus, Globe, CheckCircle, Menu, X, ImagePlus, Loader2, Trash2, Mic } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getStory, getScenes, createScene, updateScene, publishScene, publishStory, unpublishStory, updateStory, deleteScene } from '../services/storyService';
+import { getStory, getScenes, createScene, updateScene, publishScene, publishStory, unpublishStory, updateStory, deleteScene, uploadAudio } from '../services/storyService';
 import { generateContinuation } from '../services/aiService';
 
 export default function Workspace() {
@@ -24,6 +24,8 @@ export default function Workspace() {
   const [storySynopsis, setStorySynopsis] = useState("");
   const [storyCover, setStoryCover] = useState("");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [audioUrl, setAudioUrl] = useState("");
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   
   // UI State
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,7 @@ export default function Workspace() {
         setActiveSceneId(sc[0].id);
         setContent(sc[0].content || "");
         setTitle(sc[0].title || `Scene 1`);
+        setAudioUrl(sc[0].audioUrl || "");
         
         // Allow a small delay before auto-save activates to prevent saving immediate loads
         setTimeout(() => { isInitialLoadRef.current = false; }, 500);
@@ -78,22 +81,23 @@ export default function Workspace() {
     }
 
     typingTimeoutRef.current = setTimeout(() => {
-      performSave(activeSceneId, title, content);
+      performSave(activeSceneId, title, content, audioUrl);
     }, 2000); // 2 seconds debounce
 
     return () => clearTimeout(typingTimeoutRef.current);
-  }, [content, title, activeSceneId]);
+  }, [content, title, activeSceneId, audioUrl]);
 
-  const performSave = async (sceneId, sceneTitle, sceneContent) => {
+  const performSave = async (sceneId, sceneTitle, sceneContent, sceneAudioUrl) => {
     setSaving(true);
     setSaveStatus("Saving...");
     try {
       await updateScene(currentUser.uid, storyId, sceneId, {
         title: sceneTitle,
-        content: sceneContent
+        content: sceneContent,
+        audioUrl: sceneAudioUrl
       });
       setSaveStatus("Saved");
-      setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, title: sceneTitle, content: sceneContent } : s));
+      setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, title: sceneTitle, content: sceneContent, audioUrl: sceneAudioUrl } : s));
     } catch (err) {
       console.error("Auto-save failed", err);
       setSaveStatus("Error");
@@ -149,6 +153,28 @@ export default function Workspace() {
     }
   };
 
+  const handleAudioUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !activeSceneId) return;
+
+    setIsUploadingAudio(true);
+    try {
+      const path = `stories/${storyId}/scenes/${activeSceneId}/audio/${file.name}`;
+      const url = await uploadAudio(file, path);
+      setAudioUrl(url);
+      
+      // Force immediate save when audio uploaded
+      await updateScene(currentUser.uid, storyId, activeSceneId, { audioUrl: url });
+      setScenes(prev => prev.map(s => s.id === activeSceneId ? { ...s, audioUrl: url } : s));
+      
+    } catch (error) {
+      console.error("Audio upload error:", error);
+      alert("Failed to upload audio: " + error.message);
+    } finally {
+      setIsUploadingAudio(false);
+    }
+  };
+
   const handleStoryInfoBlur = async () => {
     if (!story) return;
     try {
@@ -168,13 +194,14 @@ export default function Workspace() {
     
     // Save current before switching if unsaved
     if (saveStatus === "Unsaved") {
-      performSave(activeSceneId, title, content);
+      performSave(activeSceneId, title, content, audioUrl);
     }
 
     isInitialLoadRef.current = true;
     setActiveSceneId(scene.id);
     setContent(scene.content || "");
     setTitle(scene.title || "");
+    setAudioUrl(scene.audioUrl || "");
     setAiQuestions([]);
     setSaveStatus("Saved");
     
@@ -198,6 +225,7 @@ export default function Workspace() {
       setActiveSceneId(sceneId);
       setTitle(`Scene ${newOrder}`);
       setContent("");
+      setAudioUrl("");
       if (window.innerWidth < 768) setShowLeftMobile(false);
     } catch (error) {
       console.error("Failed to create scene:", error);
@@ -223,6 +251,7 @@ export default function Workspace() {
           setActiveSceneId(null);
           setTitle("");
           setContent("");
+          setAudioUrl("");
         }
       }
     } catch (err) {
@@ -431,6 +460,12 @@ export default function Workspace() {
               />
               
               <div className="flex items-center space-x-3 ml-4 shrink-0">
+                <label className="cursor-pointer bg-white border border-gray-200 text-xs font-bold px-3 py-1.5 rounded-lg hover:border-primary hover:text-primary transition-colors flex items-center">
+                  {isUploadingAudio ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Mic className="w-3 h-3 mr-1" />}
+                  {isUploadingAudio ? 'Uploading...' : 'Add Audio'}
+                  <input type="file" accept="audio/*" className="hidden" onChange={handleAudioUpload} disabled={isUploadingAudio} />
+                </label>
+
                 <span className={`text-xs font-medium flex items-center ${saveStatus === 'Saved' ? 'text-green-600' : 'text-text-light'}`}>
                   {saveStatus === 'Saved' && <CheckCircle className="w-3 h-3 mr-1" />}
                   {saveStatus}
@@ -447,6 +482,19 @@ export default function Workspace() {
               </div>
             </div>
             
+            {audioUrl && (
+              <div className="mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center justify-between">
+                <audio controls src={audioUrl} className="h-8 w-full max-w-md outline-none" />
+                <button onClick={() => {
+                  if(window.confirm("Remove audio from this scene?")) {
+                    setAudioUrl("");
+                  }
+                }} className="text-red-500 hover:text-red-600 p-2 ml-4">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             <textarea 
               className="flex-1 w-full bg-transparent resize-none outline-none text-lg leading-relaxed text-text font-serif"
               value={content}

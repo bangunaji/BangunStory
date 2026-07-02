@@ -95,6 +95,12 @@ export default function Read() {
           {scene.title || `Chapter ${currentIndex + 1}`}
         </h1>
         
+        {scene.audioUrl && (
+          <div className="mb-12 flex justify-center">
+            <audio controls src={scene.audioUrl} className="w-full max-w-md outline-none rounded-full shadow-sm bg-gray-50" />
+          </div>
+        )}
+
         <div className="prose prose-lg max-w-none text-text font-serif leading-loose space-y-6 whitespace-pre-wrap">
           {scene.content || "This chapter is empty."}
         </div>
